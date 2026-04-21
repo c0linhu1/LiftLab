@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 
 
-def load_raw_sessions(data_dir: str = None) -> pd.DataFrame: # including type hint for arg and return value
+def load_raw_sessions(data_dir: str = "./data") -> pd.DataFrame: # including type hint for arg and return value
     """Load the raw BigQuery export CSV."""
     # converts string to path object - pointing to data folder and then appending to the filename
     if data_dir is None:
@@ -186,6 +186,3 @@ if __name__ == "__main__":
         print(purchasers.describe())
     else:
         print("No purchasing sessions found.")
-
-    print("\nColumns:")
-    print(list(df.columns))
