@@ -186,3 +186,9 @@ if __name__ == "__main__":
         print(purchasers.describe())
     else:
         print("No purchasing sessions found.")
+
+
+    # convert to csv
+    output_path = Path("./data/sessions_clean.csv")
+    df.to_csv(output_path, index=False)
+    print(f"\nSaved cleaned sessions to {output_path} ({output_path.stat().st_size / 1_000_000:.1f} MB)")
