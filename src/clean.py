@@ -111,7 +111,8 @@ def clean_sessions(df: pd.DataFrame) -> pd.DataFrame:
     # get the session duration in seconds bc GA4 timestamps assumed microseconds - clip negative durations to 0
     df["session_duration_sec"] = ((df["session_end"] - df["session_start"]) / 1_000_000).clip(lower=0)
 
-    # if duration is neg replace w 0
+    # replacing nulls w 0 for session duration - assuming missing means very short sessions
+    # that didn't record properly, rather than dropping them
     df["session_duration_sec"] = df["session_duration_sec"].fillna(0)
 
     # bounce proxy: low page depth + very short session

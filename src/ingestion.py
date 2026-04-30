@@ -6,14 +6,6 @@ it locally as CSV for development. This is the "production" ingestion
 path — run it once to generate data/sessions_raw.csv, or on a schedule
 if the source data updates.
 
-Usage:
-    python src/ingest.py
-    python src/ingest.py --start-date 20201101 --end-date 20210131 --output data/sessions_raw.csv
-
-Requires:
-    - google-cloud-bigquery installed
-    - GCP credentials configured (service account key or gcloud auth)
-    - Set GOOGLE_APPLICATION_CREDENTIALS env var, or run `gcloud auth application-default login`
 """
 import pandas as pd
 import argparse

@@ -18,7 +18,8 @@ class ExperimentConfig:
     experiment_name: str
     hypothesis: str
     primary_metric: str
-    guardrail_metrics: list[str] = field(default_factory=list)
+    # makes sure every instance gets its own list, rather than sharing a mutable default
+    guardrail_metrics: list[str] = field(default_factory=list) 
     treatment_split: float = 0.5
     stratify_by: Optional[list[str]] = None
     start_date: Optional[str] = None
@@ -71,7 +72,7 @@ def assign_users(
     else:
         assignments = _simple_assign(users, config, rng)
 
-    # Merge assignments back to session-level data
+    # merge assignments back to session-level data
     assignment_df = pd.DataFrame({
         "user_pseudo_id": list(assignments.keys()),
         "variant": list(assignments.values()),
@@ -83,7 +84,7 @@ def assign_users(
 
     return df
 
-
+# helper functions
 def _simple_assign(
     users: np.ndarray,
     config: ExperimentConfig,
