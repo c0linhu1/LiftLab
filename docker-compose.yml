@@ -1,0 +1,64 @@
+version: "3.9"
+
+# docker-compose starts and connects multiple containers for local development.
+# This file defines two services: the FastAPI backend and the Streamlit dashboard.
+services:
+  api:
+    # Build the API image from the local Dockerfile.api file.
+    build:
+      # The build context is the folder Docker can read while building.
+      # "." means the repository root.
+      context: .
+      dockerfile: Dockerfile.api
+
+    # Map port 8000 on your computer to port 8000 inside the container.
+    # Visit http://localhost:8000 to reach the API from your browser.
+    ports:
+      - "8000:8000"
+
+    # Mount local folders into the container. Changes you make on your computer
+    # show up immediately inside the container, which is useful for development.
+    volumes:
+      - ./data:/app/data
+      - ./src:/app/src
+      - ./app/api:/app/app/api
+
+    # Environment variables available to the API process inside the container.
+    environment:
+      - DATA_DIR=/app/data
+      - ENV=development
+
+    # Start uvicorn in reload mode so code changes restart the API automatically.
+    command: uvicorn app.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  dashboard:
+    # Build the dashboard image from the local Dockerfile.streamlit file.
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+
+    # Map port 8501 on your computer to port 8501 inside the container.
+    # Visit http://localhost:8501 to use the dashboard.
+    ports:
+      - "8501:8501"
+
+    # Mount dashboard code, shared source code, and data for live development.
+    volumes:
+      - ./app/dashboard:/app/app/dashboard
+      - ./src:/app/src
+      - ./data:/app/data
+
+    # API_URL uses the compose service name "api". Containers in the same
+    # compose file can talk to each other by service name.
+    environment:
+      - API_URL=http://api:8000
+      - DATA_DIR=/app/data
+
+    # Start the API service before starting the dashboard service.
+    # This controls startup order, but it does not guarantee the API is fully ready.
+    depends_on:
+      - api
+
+    # Start Streamlit and listen on all network interfaces inside the container,
+    # so Docker can forward traffic from your computer to the app.
+    command: streamlit run app/dashboard/Home.py --server.port=8501 --server.address=0.0.0.0

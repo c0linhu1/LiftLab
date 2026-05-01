@@ -1,0 +1,33 @@
+# Start from a small official Python image. This gives the container Python 3.11
+# without bringing along a full operating system image.
+FROM python:3.11-slim
+
+# Set the working folder inside the container. Later commands run from /app.
+WORKDIR /app
+
+# Copy only the dependency list first. Docker can cache the install step when
+# requirements.txt has not changed, which makes rebuilds faster.
+COPY requirements.txt .
+
+# Install the Python packages needed by the API.
+# --no-cache-dir keeps the image smaller by not storing pip's download cache.
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the project code and data into the image.
+# These files are available even when the container is run without compose
+# volume mounts.
+COPY src/ /app/src/
+COPY app/api/ /app/app/api/
+COPY data/ /app/data/
+
+# Let Python import modules from /app, so imports like app.api.main and src.*
+# work from anywhere inside the container.
+ENV PYTHONPATH=/app
+
+# Document that the API listens on port 8000 inside the container.
+# docker-compose maps this to a port on your computer.
+EXPOSE 8000
+
+# Default command for this image: start the FastAPI server with uvicorn.
+# docker-compose overrides this with a reload-enabled development command.
+CMD ["uvicorn", "app.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
