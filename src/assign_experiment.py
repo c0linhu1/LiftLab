@@ -65,6 +65,8 @@ def assign_users(
         df = df[df["event_date"] <= pd.to_datetime(config.end_date)]
 
     users = df["user_pseudo_id"].unique()
+    
+    # we use a seed for reproducibility in case for re-running experiemnt or creating other experiment instances
     rng = np.random.RandomState(config.seed)
 
     if config.stratify_by:
@@ -90,12 +92,11 @@ def _simple_assign(
     config: ExperimentConfig,
     rng: np.random.RandomState,
 ) -> dict:
-    """Simple random assignment."""
+    """Simple random assignment if we dont have stratification"""
     n_treatment = int(len(users) * config.treatment_split)
     shuffled = rng.permutation(users)
     return {
-        user: "treatment" if i < n_treatment else "control"
-        for i, user in enumerate(shuffled)
+        user: "treatment" if i < n_treatment else "control" for i, user in enumerate(shuffled)
     }
 
 
@@ -105,13 +106,13 @@ def _stratified_assign(
     rng: np.random.RandomState,
 ) -> dict:
     """
-    Stratified random assignment.
+    Stratified random assignment
     Ensures balanced variant split within each stratum.
     Uses each user's most common value for the stratification column.
     """
     strat_cols = config.stratify_by
 
-    # Get dominant stratum for each user (e.g., their most common device)
+    # Get dominant device for each user 
     user_strata = (
         df.groupby("user_pseudo_id")[strat_cols]
         .agg(lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else "unknown")
@@ -119,7 +120,9 @@ def _stratified_assign(
     )
 
     assignments = {}
+    # iterate through each stratum (device)
     for _, group in user_strata.groupby(strat_cols):
+        # getting users in each stratum
         group_users = group["user_pseudo_id"].values
         n_treatment = int(len(group_users) * config.treatment_split)
         shuffled = rng.permutation(group_users)
