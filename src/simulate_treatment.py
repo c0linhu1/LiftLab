@@ -15,14 +15,14 @@ from typing import Optional
 @dataclass
 class TreatmentEffect:
     """Define a treatment effect for a specific metric and segment."""
-    metric: str
-    effect_type: str          # "multiplicative" or "additive"
+    metric: str    # converted, revenue, pageviews, add_to_cart_events...
+    effect_type: str         # "multiplicative" or "additive"
     effect_size: float
     segment_col: Optional[str] = None
     segment_value: Optional[str] = None
 
 
-# Ground truth effects for the checkout redesign experiment
+# ground truth effects for the checkout redesign experiment
 DEFAULT_EFFECTS = [
     # Global: 3% relative conversion lift
     TreatmentEffect("converted", "multiplicative", 1.03),
@@ -36,6 +36,8 @@ DEFAULT_EFFECTS = [
                      segment_col="device_type", segment_value="desktop"),
     # Global: small add-to-cart improvement
     TreatmentEffect("add_to_cart_events", "multiplicative", 1.02),
+    # Global: +5 seconds increase in session duration (users spend slightly longer)
+    TreatmentEffect("session_duration_sec", "additive", 5.0),
 ]
 
 
@@ -44,15 +46,16 @@ def simulate_treatment_effects(
     effects: list[TreatmentEffect] = DEFAULT_EFFECTS,
     seed: int = 42,
 ) -> pd.DataFrame:
-    """Apply treatment effects to the treatment group only."""
+    """Applying treatment effects to the treatment group only."""
     df = df.copy()
     rng = np.random.RandomState(seed)
     treatment_mask = df["variant"] == "treatment"
 
     for effect in effects:
-        # Build target mask: must be treatment + optional segment
+        # building target mask
         mask = treatment_mask.copy()
         if effect.segment_col and effect.segment_value:
+            # if segment_col is specified, further filter to that segment (e.g. mobile users)
             mask = mask & (df[effect.segment_col] == effect.segment_value)
 
         if mask.sum() == 0:
@@ -71,34 +74,35 @@ def simulate_treatment_effects(
 
     return df
 
-
+# internal functions
 def _simulate_binary(df, mask, effect, rng):
     """
-    For conversion: probabilistically flip some non-converters.
-
-    If baseline rate is p and we want p * 1.03, we need to flip
-    enough 0s to 1s to hit the new rate. Then sample realistic
-    revenue values from existing purchasers for the new converters.
+    FLipping non-converters to converters so we can achieve the higher
+    conversion rate to 1.03 or whatever the target is.
+    Then sample realistic revenue values from existing purchasers for the new converters.
     """
+    # getting mean of people in treatment group and specific segment and if they converted or not
     current_rate = df.loc[mask, "converted"].mean()
     target_rate = min(current_rate * effect.effect_size, 1.0)
 
     non_converters = mask & (df["converted"] == 0)
-    n_non_converters = non_converters.sum()
+    num_non_converters = non_converters.sum()
     additional_needed = int((target_rate - current_rate) * mask.sum())
-    additional_needed = min(max(additional_needed, 0), n_non_converters)
+    additional_needed = min(max(additional_needed, 0), num_non_converters)
 
     if additional_needed == 0:
         return
 
-    # Flip selected non-converters
+    # flip selected non-converters - finding the row index of non converters and randomly selecting
+    # replace=False so we don't flip the same person twice
     flip_idx = rng.choice(
         df.index[non_converters], size=additional_needed, replace=False
     )
+    # convert values in converted and transactions to 1 for row index in flip_idx
     df.loc[flip_idx, "converted"] = 1
     df.loc[flip_idx, "transactions"] = 1
 
-    # Give new converters realistic revenue from existing distribution
+    # give new converters realistic revenue from existing distribution
     existing_rev = df.loc[(df["converted"] == 1) & (df["revenue"] > 0), "revenue"]
     if len(existing_rev) > 0:
         df.loc[flip_idx, "revenue"] = rng.choice(
@@ -112,18 +116,25 @@ def _simulate_continuous(df, mask, effect, rng):
     so it's not a perfectly uniform shift.
     """
     col = effect.metric
+    # looking at specific ppl in treatment and metric 
     vals = df.loc[mask, col].copy()
 
     if effect.effect_type == "multiplicative":
         noise = rng.normal(1.0, 0.01, size=mask.sum())
-        df.loc[mask, col] = (vals * effect.effect_size * noise).clip(lower=0)
+        # Scale values by effect_size and multiply by noise (normal distribution)
+        # Noise adds realistic variation across users while preserving the expected value 
+        new_vals = (vals * effect.effect_size * noise).clip(lower=0)
     else:
+        # Scale values by effect_size and add noise (normal distribution cenered 
+        # around 0 with std dev of 10% of the effect size)
         noise = rng.normal(0, abs(effect.effect_size) * 0.1, size=mask.sum())
-        df.loc[mask, col] = (vals + effect.effect_size + noise).clip(lower=0)
+        new_vals = (vals + effect.effect_size + noise).clip(lower=0)
 
-    # Round integer columns
-    if col in ["pageviews", "event_count", "add_to_cart_events", "transactions"]:
-        df.loc[mask, col] = df.loc[mask, col].round().astype(int)
+    # round integer columns
+    if col in ["pageviews", "event_count", "add_to_cart_events", "transactions", "session_duration_sec"]:
+        new_vals = new_vals.round().astype(int)
+
+    df.loc[mask, col] = new_vals
 
 
 def get_ground_truth(effects: list[TreatmentEffect] = DEFAULT_EFFECTS) -> dict:
@@ -132,11 +143,11 @@ def get_ground_truth(effects: list[TreatmentEffect] = DEFAULT_EFFECTS) -> dict:
     for e in effects:
         key = e.metric
         if e.segment_col:
-            key = f"{e.metric}__{e.segment_col}={e.segment_value}"
+            key = f"{e.metric}_{e.segment_col} = {e.segment_value}"
         truth[key] = {
             "effect_type": e.effect_type,
             "effect_size": e.effect_size,
-            "segment": f"{e.segment_col}={e.segment_value}" if e.segment_col else "global",
+            "segment": f"{e.segment_col} = {e.segment_value}" if e.segment_col else "global",
         }
     return truth
 
@@ -148,14 +159,16 @@ if __name__ == "__main__":
     df = build_clean_sessions()
     df = assign_users(df)
 
-    print("=== BEFORE simulation ===")
-    print(df.groupby("variant")[["converted", "revenue", "pageviews"]].mean())
+    print("BEFORE SIMULATION:")
+    print(df.groupby("variant")[["converted", "revenue", "pageviews", "session_duration_sec"]].mean())
 
+    # simulate treatment effects in the treatment group and store ground truth for validation
     df = simulate_treatment_effects(df)
 
-    print("\n=== AFTER simulation ===")
-    print(df.groupby("variant")[["converted", "revenue", "pageviews"]].mean())
+    print("\nAFTER SIMULATION:")
+    print(df.groupby("variant")[["converted", "revenue", "pageviews", "session_duration_sec"]].mean())
 
-    print("\n=== Ground truth ===")
+    print("\nGROUND TRUTH:")
     for k, v in get_ground_truth().items():
         print(f"  {k}: {v}")
+
