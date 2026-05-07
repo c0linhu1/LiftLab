@@ -10,7 +10,14 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 
-# decorator
+
+"""
+we use @dataclass so we dont have to do 
+self.experiment_id = experiment_id
+self.experiment_name = experiment_name
+self.hypothesis = hypothesis
+... in the __init__ method. It automatically generates the __init__ method for us based on the class attributes we define.
+"""
 @dataclass
 class ExperimentConfig:
     """Configuration for a single experiment - including type hints"""

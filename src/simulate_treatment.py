@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Optional
 
-# decorator
+
 @dataclass
 class TreatmentEffect:
     """Define a treatment effect for a specific metric and segment."""
